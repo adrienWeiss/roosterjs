@@ -14,13 +14,13 @@ import {
     clearProceedingSnapshots,
     createSnapshots,
     isCtrlOrMetaPressed,
-    moveCurrentSnapsnot,
+    moveCurrentSnapshot,
     canUndoAutoComplete,
 } from 'roosterjs-editor-dom';
 
 // Max stack size that cannot be exceeded. When exceeded, old undo history will be dropped
 // to keep size under limit. This is kept at 10MB
-const MAXSIZELIMIT = 1e7;
+const MAX_SIZE_LIMIT = 1e7;
 
 /**
  * @internal
@@ -207,11 +207,11 @@ export default class UndoPlugin implements PluginWithState<UndoPluginState> {
 }
 
 function createUndoSnapshots(): UndoSnapshotsService {
-    const snapshots = createSnapshots(MAXSIZELIMIT);
+    const snapshots = createSnapshots(MAX_SIZE_LIMIT);
 
     return {
         canMove: (delta: number): boolean => canMoveCurrentSnapshot(snapshots, delta),
-        move: (delta: number): string => moveCurrentSnapsnot(snapshots, delta),
+        move: (delta: number): string => moveCurrentSnapshot(snapshots, delta),
         addSnapshot: (snapshot: string, isAutoCompleteSnapshot: boolean) =>
             addSnapshot(snapshots, snapshot, isAutoCompleteSnapshot),
         clearRedo: () => clearProceedingSnapshots(snapshots),

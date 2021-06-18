@@ -1,3 +1,4 @@
+import ImageHandler from './ImageHandler';
 import ResizeHelper from './ResizeHelper';
 import { Browser, fromHtml, getEntityFromElement, getEntitySelector } from 'roosterjs-editor-dom';
 import { insertEntity } from 'roosterjs-editor-api';
@@ -10,6 +11,7 @@ import {
 } from 'roosterjs-editor-types';
 
 const ENTITY_TYPE = 'IMAGE_RESIZE_WRAPPER';
+const ROTATE_HANDLE_CLASS = 'roosterjsRotateHandle';
 
 /**
  * Resize Handle Definitions
@@ -53,12 +55,14 @@ type ResizeContext = [XCoordinate, YCoordinate];
 /**
  * @internal
  */
-export default class ImageResizeHandler {
+export default class ImageResizeHandler implements ImageHandler {
     private image: HTMLImageElement | null;
     private initWidth: number;
     private initHeight: number;
     private ratio: number;
-    private resizeHelpers: ResizeHelper<ResizeContext>[][] = [];
+    private resizeHelpers: ResizeHelper<ResizeContext>[];
+
+    private angle: number;
 
     constructor(
         private editor: IEditor,
@@ -78,10 +82,13 @@ export default class ImageResizeHandler {
         }
 
         this.image = image;
-        this.createWrapper();
+
+        if (this.image) {
+            this.createWrapper();
+        }
     }
 
-    getResizeWrapper() {
+    getImageWrapper() {
         const entity = getEntityFromElement(this.image?.parentNode as HTMLElement);
 
         return entity?.type == ENTITY_TYPE ? entity.wrapper : null;
@@ -112,26 +119,19 @@ export default class ImageResizeHandler {
         });
     };
 
+    removeTempAttributes(img: HTMLImageElement) {}
+
     private hideResizeHandles() {
-        const wrapper = this.getResizeWrapper();
-
-        for (let i = 0; i < this.resizeHelpers.length; i++) {
-            for (let j = 0; j < this.resizeHelpers[i].length; j++) {
-                const helper = this.resizeHelpers[i][j];
-                helper?.dispose();
-            }
-        }
-
+        this.resizeHelpers?.forEach(helper => helper.dispose());
         this.resizeHelpers = [];
-        this.removeWrappers(wrapper);
+
+        const wrapper = this.getImageWrapper();
+        if (wrapper) {
+            this.removeWrappers(wrapper);
+        }
     }
 
     private createWrapper() {
-        if (!this.image) {
-            return;
-        }
-
-        const doc = this.editor.getDocument();
         const { wrapper } = insertEntity(
             this.editor,
             ENTITY_TYPE,
@@ -142,12 +142,17 @@ export default class ImageResizeHandler {
 
         wrapper.style.position = 'relative';
         wrapper.style.display = Browser.isSafari ? 'inline-block' : 'inline-flex';
+        wrapper.style.transform = this.image.style.transform;
+        this.image.style.transform = '';
+        this.editor.select(wrapper, PositionType.After);
+
         const step = this.editor.isFeatureEnabled(ExperimentalFeatures.SingleDirectionResize)
             ? STEP.AllResize
             : STEP.CornerResize;
+        this.resizeHelpers = [];
+        const doc = this.editor.getDocument();
 
         for (let x: XCoordinate = XCoordinate.Left; x <= XCoordinate.Right; x += step) {
-            this.resizeHelpers[x] = [];
             for (let y: YCoordinate = YCoordinate.Bottom; y <= YCoordinate.Top; y += step) {
                 const direction = DIRECTIONS[x][y];
                 const html = direction
@@ -163,26 +168,37 @@ export default class ImageResizeHandler {
                       }:-${HANDLE_MARGIN}px;${
                           x == XCoordinate.Left ? 'left' : 'right'
                       }:-${HANDLE_MARGIN}px"></div></div>`
-                    : `<div style="position:absolute;left:0;right:0;top:0;bottom:0;border:solid 1px ${this.selectionBorderColor};pointer-events:none;">`;
+                    : `<div style="position:absolute;left:0;right:0;top:0;bottom:0;border:solid 1px ${this.selectionBorderColor};pointer-events:none;">` +
+                      `<div style="position:absolute;left:50%;top:-15px;height:15px;width:1px;background-color:${this.selectionBorderColor}">` +
+                      `<div class="${ROTATE_HANDLE_CLASS}" style="border:solid 1px ${
+                          this.selectionBorderColor
+                      };background-color:${
+                          this.editor.isDarkMode() ? '#333' : 'white'
+                      };width:30px;height:30px;left:-15px;top:-30px;border-radius:50%;cursor:move;position:absolute;pointer-events:auto">` +
+                      '<svg style="width:16px;height:16px;margin: 7px 7px">' +
+                      `<path d="M 10.5,10.0 A 3.8,3.8 0 1 1 6.7,6.3" transform="matrix(1.1 1.1 -1.1 1.1 11.6 -10.8)" fill-opacity="0" stroke-width="1" stroke="${this.selectionBorderColor}" />` +
+                      `<path d="M12.0 3.648l.884-.884.53 2.298-2.298-.53z" stroke="${this.selectionBorderColor}" /></svg></div></div></div>`;
                 const div = fromHtml(html, doc)[0] as HTMLElement;
                 wrapper.appendChild(div);
 
-                this.resizeHelpers[x][y] = direction
-                    ? new ResizeHelper(
-                          div,
-                          [x, y],
-                          this.onResizeBegin,
-                          this.onResize,
-                          this.onResizeEnd
-                      )
-                    : null;
+                this.resizeHelpers.push(
+                    direction
+                        ? new ResizeHelper(
+                              div,
+                              [x, y],
+                              this.onResizeBegin,
+                              this.onResize,
+                              this.onResizeEnd
+                          )
+                        : new ResizeHelper(
+                              div.querySelector('.' + ROTATE_HANDLE_CLASS),
+                              [x, y],
+                              this.onResizeBegin,
+                              this.onRotate
+                          )
+                );
             }
         }
-
-        // If the resizeDiv's image has a transform, apply it to the container
-        wrapper.style.transform = this.image.style.transform;
-        this.image.style.transform = '';
-        this.editor.select(wrapper, PositionType.After);
     }
 
     private onResizeBegin = () => {
@@ -194,6 +210,7 @@ export default class ImageResizeHandler {
                 this.initWidth > 0 && this.initHeight > 0
                     ? (this.initWidth * 1.0) / this.initHeight
                     : 0;
+            this.angle = 0;
         }
     };
 
@@ -216,9 +233,9 @@ export default class ImageResizeHandler {
                       this.minHeight
                   );
 
-            if (shouldPreserveRatio) {
-                newHeight = Math.min(newHeight, (newWidth * this.initHeight) / this.initWidth);
-                newWidth = Math.min(newWidth, (newHeight * this.initWidth) / this.initHeight);
+            if (shouldPreserveRatio && this.ratio > 0) {
+                newHeight = Math.min(newHeight, newWidth / this.ratio);
+                newWidth = Math.min(newWidth, newHeight * this.ratio);
 
                 if (this.ratio > 0) {
                     if (newWidth < newHeight * this.ratio) {
@@ -232,7 +249,7 @@ export default class ImageResizeHandler {
             this.setSize(newWidth, newHeight);
 
             // double check
-            if (shouldPreserveRatio) {
+            if (shouldPreserveRatio && this.ratio > 0) {
                 const clientWidth = Math.floor(this.image.clientWidth);
                 const clientHeight = Math.floor(this.image.clientHeight);
                 newWidth = Math.floor(newWidth);
@@ -254,6 +271,19 @@ export default class ImageResizeHandler {
         if (this.image) {
             this.editor.addUndoSnapshot();
             this.editor.triggerContentChangedEvent(ChangeSource.ImageResize, this.image);
+        }
+    };
+
+    private onRotate = (context: ResizeContext, deltaX: number, deltaY: number) => {
+        const wrapper = this.getImageWrapper();
+
+        if (wrapper) {
+            const h = this.initHeight / 2 + 25;
+            const newX = h * Math.sin(this.angle) + deltaX;
+            const newY = h * Math.cos(this.angle) - deltaY;
+            const deg = (Math.atan2(newX, newY) / Math.PI) * 180;
+
+            wrapper.style.transform = `rotate(${deg}deg)`;
         }
     };
 

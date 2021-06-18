@@ -18,9 +18,9 @@ export default class ResizeHelper<TContext> {
     constructor(
         private trigger: HTMLElement,
         private context: TContext,
-        private onResizeBegin: ResizeCallback<TContext>,
-        private onResize: ResizeCallback<TContext>,
-        private onResizeEnd: ResizeCallback<TContext>
+        private onResizeBegin?: ResizeCallback<TContext>,
+        private onResize?: ResizeCallback<TContext>,
+        private onResizeEnd?: ResizeCallback<TContext>
     ) {
         trigger.addEventListener('mousedown', this.onMouseDown);
     }

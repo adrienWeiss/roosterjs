@@ -1,5 +1,7 @@
+import ImageCropHandler from './ImageCropHandler';
+import ImageHandler from './ImageHandler';
 import ImageResizeHandler from './ImageResizeHandler';
-import { matchesSelector, safeInstanceOf } from 'roosterjs-editor-dom';
+import { matchesSelector, safeInstanceOf, toArray } from 'roosterjs-editor-dom';
 import {
     ChangeSource,
     EditorPlugin,
@@ -21,7 +23,7 @@ const ALT_KEYCODE = 18;
 export default class ImageResize implements EditorPlugin {
     private editor: IEditor;
     private disposer: () => void;
-    private resizeHandler: ImageResizeHandler;
+    private imageHandler: ImageHandler;
 
     /**
      * Create a new instance of ImageResize
@@ -33,8 +35,8 @@ export default class ImageResize implements EditorPlugin {
      * that the tag must be IMG regardless what the selector is
      */
     constructor(
-        private minWidth: number = 10,
-        private minHeight: number = 10,
+        private minWidth: number = 50,
+        private minHeight: number = 50,
         private selectionBorderColor: string = '#DB626C',
         private forcePreserveRatio: boolean = false,
         private resizableImageSelector: string = 'img'
@@ -47,6 +49,8 @@ export default class ImageResize implements EditorPlugin {
         return 'ImageResize';
     }
 
+    public isCropping = false;
+
     /**
      * Initialize this plugin. This should only be called from Editor
      * @param editor Editor instance
@@ -54,21 +58,24 @@ export default class ImageResize implements EditorPlugin {
     initialize(editor: IEditor) {
         this.editor = editor;
         this.disposer = editor.addDomEventHandler('blur', this.onBlur);
-        this.resizeHandler = new ImageResizeHandler(
-            this.editor,
-            this.minWidth,
-            this.minHeight,
-            this.selectionBorderColor,
-            this.forcePreserveRatio
-        );
+
+        this.imageHandler = this.isCropping
+            ? new ImageCropHandler(this.editor, this.minWidth, this.minHeight)
+            : new ImageResizeHandler(
+                  this.editor,
+                  this.minWidth,
+                  this.minHeight,
+                  this.selectionBorderColor,
+                  this.forcePreserveRatio
+              );
     }
 
     /**
      * Dispose this plugin
      */
     dispose() {
-        this.resizeHandler.setCurrentImage(null);
-        this.resizeHandler = null;
+        this.imageHandler.setCurrentImage(null);
+        this.imageHandler = null;
         this.disposer();
         this.disposer = null;
         this.editor = null;
@@ -81,7 +88,7 @@ export default class ImageResize implements EditorPlugin {
     onPluginEvent(e: PluginEvent) {
         switch (e.eventType) {
             case PluginEventType.MouseDown:
-                this.resizeHandler.setCurrentImage(null);
+                this.imageHandler.setCurrentImage(null);
                 break;
 
             case PluginEventType.MouseUp:
@@ -92,7 +99,7 @@ export default class ImageResize implements EditorPlugin {
                     target.isContentEditable &&
                     matchesSelector(target, this.resizableImageSelector)
                 ) {
-                    this.resizeHandler.setCurrentImage(target);
+                    this.imageHandler.setCurrentImage(target);
                 }
 
                 break;
@@ -100,16 +107,16 @@ export default class ImageResize implements EditorPlugin {
             case PluginEventType.KeyDown:
                 const key = e.rawEvent.which;
                 if (key == Keys.DELETE || key == Keys.BACKSPACE) {
-                    const wrapper = this.resizeHandler.getResizeWrapper();
+                    const wrapper = this.imageHandler.getImageWrapper();
                     if (wrapper) {
                         this.editor.addUndoSnapshot(() => {
                             this.editor.deleteNode(wrapper);
-                            this.resizeHandler.setCurrentImage(null);
+                            this.imageHandler.setCurrentImage(null);
                         });
                         e.rawEvent.preventDefault();
                     }
                 } else if (key != SHIFT_KEYCODE && key != CTRL_KEYCODE && key != ALT_KEYCODE) {
-                    this.resizeHandler.setCurrentImage(null, true /*selectImage*/);
+                    this.imageHandler.setCurrentImage(null, true /*selectImage*/);
                 }
                 break;
 
@@ -117,24 +124,30 @@ export default class ImageResize implements EditorPlugin {
                 if (
                     !(
                         e.source == ChangeSource.ImageResize ||
+                        e.source == ChangeSource.ImageCrop ||
                         (e.source == ChangeSource.InsertEntity &&
-                            this.resizeHandler.isHandlerEntity(<Entity>e.data))
+                            this.imageHandler.isHandlerEntity(<Entity>e.data))
                     )
                 ) {
-                    this.resizeHandler.setCurrentImage(null);
-                    this.resizeHandler.removeWrappers();
+                    this.imageHandler.removeWrappers();
                 }
 
                 break;
 
             case PluginEventType.EntityOperation:
-                if (this.resizeHandler.isHandlerEntity(e.entity)) {
+                if (this.imageHandler.isHandlerEntity(e.entity)) {
                     if (e.operation == EntityOperation.ReplaceTemporaryContent) {
-                        this.resizeHandler.removeWrappers(e.entity.wrapper);
+                        this.imageHandler.removeWrappers(e.entity.wrapper);
                     } else if (e.operation == EntityOperation.Click) {
                         e.rawEvent.preventDefault();
                     }
                 }
+                break;
+
+            case PluginEventType.ExtractContentWithDom:
+                toArray(e.clonedRoot.querySelectorAll(this.resizableImageSelector)).forEach(img => {
+                    this.imageHandler.removeTempAttributes(img as HTMLImageElement);
+                });
                 break;
         }
     }
@@ -143,17 +156,17 @@ export default class ImageResize implements EditorPlugin {
      * @deprecated
      */
     showResizeHandle(img: HTMLImageElement) {
-        this.resizeHandler.setCurrentImage(img);
+        this.imageHandler.setCurrentImage(img);
     }
 
     /**
      * @deprecated
      */
     hideResizeHandle(selectImageAfterUnSelect?: boolean) {
-        this.resizeHandler.setCurrentImage(null);
+        this.imageHandler.setCurrentImage(null, selectImageAfterUnSelect);
     }
 
     private onBlur = () => {
-        this.resizeHandler.setCurrentImage(null);
+        this.imageHandler.setCurrentImage(null);
     };
 }

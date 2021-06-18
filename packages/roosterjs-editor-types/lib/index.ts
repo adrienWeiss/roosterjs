@@ -5,6 +5,7 @@ export { DocumentPosition } from './browser/DocumentPosition';
 export { default as EdgeLinkPreview } from './browser/EdgeLinkPreview';
 export { Keys } from './browser/Keys';
 export { NodeType } from './browser/NodeType';
+export { ContentTypePrefix, ContentType } from './browser/ContentType';
 
 // Enum
 export { Alignment } from './enum/Alignment';
@@ -32,6 +33,7 @@ export { default as BasePluginEvent } from './event/BasePluginEvent';
 export { default as BeforeDisposeEvent } from './event/BeforeDisposeEvent';
 export { default as BeforePasteEvent } from './event/BeforePasteEvent';
 export { default as ContentChangedEvent } from './event/ContentChangedEvent';
+export { default as EditImageEvent } from './event/EditImageEvent';
 export { default as EditorReadyEvent } from './event/EditorReadyEvent';
 export { default as EntityOperationEvent } from './event/EntityOperationEvent';
 export { default as ExtractContentWithDomEvent } from './event/ExtractContentWithDomEvent';
@@ -75,7 +77,11 @@ export {
     StyleBasedFormatState,
     EditorUndoState,
 } from './interface/FormatState';
-export { default as ExtractClipboardEventOption } from './interface/ExtractClipboardEventOption';
+export {
+    default as ExtractClipboardEventOption,
+    ExtractClipboardItemsOption,
+    ExtractClipboardItemsForIEOptions,
+} from './interface/ExtractClipboardEventOption';
 export { default as IContentTraverser } from './interface/IContentTraverser';
 export { default as InlineElement } from './interface/InlineElement';
 export {
