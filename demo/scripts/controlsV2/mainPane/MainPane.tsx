@@ -4,7 +4,7 @@ import SampleEntityPlugin from '../plugins/SampleEntityPlugin';
 import { ApiPlaygroundPlugin } from '../sidePane/apiPlayground/ApiPlaygroundPlugin';
 import { ContentModelPanePlugin } from '../sidePane/contentModel/ContentModelPanePlugin';
 import { darkModeButton } from '../demoButtons/darkModeButton';
-import { Editor } from 'roosterjs-content-model-core';
+import { Editor, createModelFromHtml } from 'roosterjs-content-model-core';
 import { EditorOptionsPlugin } from '../sidePane/editorOptions/EditorOptionsPlugin';
 import { EventViewPlugin } from '../sidePane/eventViewer/EventViewPlugin';
 import { exportContentButton } from '../demoButtons/exportContentButton';
@@ -364,7 +364,11 @@ export class MainPane extends React.Component<{}, MainPaneState> {
                             getDarkColor={getDarkColor}
                             snapshots={this.snapshotPlugin.getSnapshots()}
                             trustedHTMLHandler={trustedHTMLHandler}
-                            initialModel={this.model}
+                            initialModel={createModelFromHtml(
+                                '<span>foo</span>',
+                                {},
+                                trustedHTMLHandler
+                            )}
                             editorCreator={this.state.editorCreator}
                             dir={this.state.isRtl ? 'rtl' : 'ltr'}
                             knownColors={this.knownColors}

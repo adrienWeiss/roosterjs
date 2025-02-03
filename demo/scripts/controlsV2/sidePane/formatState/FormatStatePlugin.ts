@@ -39,6 +39,7 @@ export class FormatStatePlugin extends SidePanePluginImpl<FormatStatePane, Forma
         }
 
         const format = getFormatState(this.editor);
+        console.log('format', format);
         const selection = this.editor?.getDOMSelection();
         let x = 0;
         let y = 0;
